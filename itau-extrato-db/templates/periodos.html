@@ -114,74 +114,93 @@
 
 
 
-<!-- GRÁFICO -->
+<!-- === GRÁFICOS === -->
+
+<!-- Débito × Crédito (por dia) -->
 <div class="card" style="margin-top:16px">
   <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
-    <strong>Débitos × Créditos × Saldo do dia</strong>
-    <span class="small">Clique numa coluna para ver os lançamentos do dia</span>
+    <strong>Débitos × Créditos (por dia)</strong>
+    <span class="small">Clique em uma barra para ver as transações do dia</span>
   </div>
   <div class="hr"></div>
-  <canvas id="chart" height="110"></canvas>
+  <canvas id="chartDC" height="110"></canvas>
 </div>
 
-<!-- DETALHE DO DIA (preenchido via fetch) -->
+<!-- Saldo do dia (visualização separada) -->
+<div class="card" style="margin-top:16px">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+    <strong>Saldo do dia (por dia)</strong>
+    <span class="small">Clique em um ponto para ver as transações do dia</span>
+  </div>
+  <div class="hr"></div>
+  <canvas id="chartSaldo" height="110"></canvas>
+</div>
+
+<!-- Painel de detalhes (preenchido via fetch) -->
 <div id="detalhe-dia"></div>
 
 <!-- Chart.js (CDN) -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>
-  const labels = {{ labels|tojson }};
-  const debitos = {{ debitos|tojson }};
+  // Dados vindos do backend
+  const labels   = {{ labels|tojson }};
+  const debitos  = {{ debitos|tojson }};
   const creditos = {{ creditos|tojson }};
   const saldoDia = {{ saldo_dia|tojson }};
 
-  const showDebitos = {{ 1 if show_debitos else 0 }};
-  const showCreditos = {{ 1 if show_creditos else 0 }};
-  const showSaldo = {{ 1 if show_saldo else 0 }};
+  // Função comum para abrir detalhe do dia
+  async function loadDetalhe(dia){
+    const resp = await fetch(`/periodos/detalhe?dia=${encodeURIComponent(dia)}`);
+    const html = await resp.text();
+    const container = document.getElementById('detalhe-dia');
+    container.innerHTML = html;
+    container.scrollIntoView({ behavior:'smooth', block:'start' });
+  }
 
-  const datasets = [
-    { key:'debitos',  label:'Débitos',     type:'bar', data: debitos,  hidden: !showDebitos },
-    { key:'creditos', label:'Créditos',    type:'bar', data: creditos, hidden: !showCreditos },
-    { key:'saldo',    label:'Saldo do dia',type:'bar', data: saldoDia, hidden: !showSaldo }
-  ];
-
-  const chart = new Chart(document.getElementById('chart'), {
+  // Gráfico 1: Débitos × Créditos (barras)
+  const chartDC = new Chart(document.getElementById('chartDC'), {
     type: 'bar',
-    data: { labels, datasets },
+    data: {
+      labels,
+      datasets: [
+        { label: 'Débitos',  type:'bar', data: debitos },
+        { label: 'Créditos', type:'bar', data: creditos }
+      ]
+    },
     options: {
       responsive: true,
       interaction: { mode: 'nearest', intersect: true },
-      scales: { x: { stacked:false }, y: { beginAtZero:true } },
-      plugins: { legend: { position: 'top' } },
-      onClick: async (evt, elements) => {
+      scales: { x:{ stacked:false }, y:{ beginAtZero:true } },
+      plugins: { legend:{ position:'top' } },
+      onClick: (evt, elements) => {
         if (!elements?.length) return;
         const idx = elements[0].index;
-        const dia = labels[idx];
-        const resp = await fetch(`/periodos/detalhe?dia=${encodeURIComponent(dia)}`);
-        const html = await resp.text();
-        const container = document.getElementById('detalhe-dia');
-        container.innerHTML = html;
-        container.scrollIntoView({ behavior:'smooth', block:'start' });
+        loadDetalhe(labels[idx]);
       }
     }
   });
 
-  // Toggle instantâneo (sem reload) quando usuário mexe nos checkboxes
-  // Mantém também o estado visual no gráfico até que ele clique "Aplicar" se quiser persistir na URL.
-  document.querySelectorAll('input[name=show_debitos], input[name=show_creditos], input[name=show_saldo]')
-    .forEach(cb => {
-      cb.addEventListener('change', () => {
-        const map = {
-          show_debitos: 'Débitos',
-          show_creditos: 'Créditos',
-          show_saldo: 'Saldo do dia'
-        };
-        const ds = chart.data.datasets.find(d => d.label === map[cb.name]);
-        if (ds) {
-          ds.hidden = !cb.checked;
-          chart.update();
-        }
-      });
-    });
+  // Gráfico 2: Saldo do dia (linha)
+  const chartSaldo = new Chart(document.getElementById('chartSaldo'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Saldo do dia', type:'line', data: saldoDia, tension: 0.25, pointRadius: 3 }
+      ]
+    },
+    options: {
+      responsive: true,
+      interaction: { mode: 'nearest', intersect: true },
+      scales: { x:{}, y:{ beginAtZero:false } },
+      plugins: { legend:{ position:'top' } },
+      onClick: (evt, elements) => {
+        if (!elements?.length) return;
+        const idx = elements[0].index;
+        loadDetalhe(labels[idx]);
+      }
+    }
+  });
 </script>
+
 {% endblock %}
