@@ -1,0 +1,36 @@
+<div class="card" style="margin-top:16px">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+    <strong>Transações em {{ dia | fmt_date }}</strong>
+    <a class="btn secondary" onclick="document.getElementById('detalhe-dia').innerHTML='';">Fechar</a>
+  </div>
+  <div class="hr"></div>
+
+  {% if rows %}
+    <div class="table-wrap">
+      <table class="table dense">
+        <thead>
+          <tr>
+            <th>Descrição</th>
+            <th>Valor</th>
+            <th>Tipo</th>
+            <th>Categoria</th>
+            <th>Detalhe</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in rows %}
+            <tr>
+              <td data-label="Descrição">{{ r.descricao }}</td>
+              <td data-label="Valor" class="right mono">{{ r.valor | money }}</td>
+              <td data-label="Tipo">{{ r.tipo_mov or '—' }}</td>
+              <td data-label="Categoria">{{ r.categoria or '—' }}</td>
+              <td data-label="Detalhe">{{ r.detalhe_categoria or '—' }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="small">Sem lançamentos neste dia.</div>
+  {% endif %}
+</div>

@@ -420,31 +420,112 @@ def wipe_all():
     resp = RedirectResponse(url="/input?wipe_ok=1", status_code=303)
     return resp
 
-@app.get("/periodos", response_class=HTMLResponse)
-def periodos(request: Request, mes: int | None = None, ano: int | None = None):
-    init_db()
+# --- IMPORTS necessários no topo (alguns você já tem) ---
+from datetime import date
+import calendar
+from fastapi import Query
+from fastapi.responses import HTMLResponse
+
+# --- helpers de período (mês→datas) ---
+def _ym_to_bounds(ym: str) -> tuple[str, str]:
+    """
+    'YYYY-MM' -> ('YYYY-MM-01', 'YYYY-MM-<último-dia>')
+    """
+    y, m = ym.split("-")
+    y, m = int(y), int(m)
+    first = date(y, m, 1)
+    last = date(y, m, calendar.monthrange(y, m)[1])
+    return first.isoformat(), last.isoformat()
+
+def _month_range_bounds(start_ym: str | None, end_ym: str | None) -> tuple[str, str, str, str]:
+    """
+    Se não vier nada: usa o mês atual em ambas.
+    Retorna (start_ym, end_ym, dt_ini, dt_fim)
+    """
     today = date.today()
-    if not mes:
-        mes = today.month
-    if not ano:
-        ano = today.year
+    cur_ym = f"{today.year:04d}-{today.month:02d}"
+    s = start_ym or cur_ym
+    e = end_ym or cur_ym
+    dt_ini, _ = _ym_to_bounds(s)
+    _, dt_fim = _ym_to_bounds(e)
+    return s, e, dt_ini, dt_fim
+
+# --- SQLs para o período (agregação por dia + saldo do dia via view) ---
+SQL_PERIOD_DAILY = """
+WITH days AS (
+  SELECT date(data) AS dia,
+         SUM(CASE WHEN valor < 0 THEN -valor ELSE 0 END) AS debitos,
+         SUM(CASE WHEN valor > 0 THEN  valor ELSE 0 END) AS creditos
+  FROM transactions
+  WHERE date(data) BETWEEN date(?) AND date(?)
+  GROUP BY date(data)
+)
+SELECT d.dia,
+       d.debitos,
+       d.creditos,
+       s.saldo AS saldo_dia
+FROM days d
+LEFT JOIN v_saldo_por_dia s ON s.data = d.dia
+ORDER BY d.dia;
+"""
+
+SQL_DETAIL_BY_DAY = """
+SELECT date(data) AS data, lancamentos AS descricao, valor, tipo_mov, categoria, detalhe_categoria
+FROM transactions
+WHERE date(data) = date(?)
+ORDER BY data, id;
+"""
+
+# --- NOVA ROTA: /periodos (gráfico + painel de detalhe sob demanda) ---
+@app.get("/periodos", response_class=HTMLResponse)
+def periodos(
+    request: Request,
+    start_month: str | None = Query(None, description="YYYY-MM"),
+    end_month: str | None = Query(None, description="YYYY-MM"),
+    show_debitos: int = Query(1),
+    show_creditos: int = Query(1),
+    show_saldo: int = Query(1),
+):
+    init_db()
+    s_ym, e_ym, dt_ini, dt_fim = _month_range_bounds(start_month, end_month)
 
     with get_conn() as conn:
-        sql = """
-            SELECT 
-                date(data) as data,
-                SUM(CASE WHEN tipo_mov='debito'  THEN valor ELSE 0 END) AS debitos,
-                SUM(CASE WHEN tipo_mov='credito' THEN valor ELSE 0 END) AS creditos,
-                MAX(saldo_dia) as saldo
-            FROM transactions
-            WHERE strftime('%m', data) = ? AND strftime('%Y', data) = ?
-            GROUP BY date(data)
-            ORDER BY date(data);
-        """
-        cur = conn.execute(sql, (f"{mes:02d}", str(ano)))
-        cols, historico = rows_to_dicts(cur, cur.fetchall())
+        cur = conn.execute(SQL_PERIOD_DAILY, (dt_ini, dt_fim))
+        cols, rows = rows_to_dicts(cur, cur.fetchall())
+
+    labels = [r["dia"] for r in rows]
+    debitos = [float(r["debitos"] or 0.0) for r in rows]
+    creditos = [float(r["creditos"] or 0.0) for r in rows]
+    saldo_dia = [(r["saldo_dia"] if r["saldo_dia"] is not None else None) for r in rows]
 
     return templates.TemplateResponse(
         "periodos.html",
-        {"request": request, "mes": mes, "ano": ano, "historico": historico},
+        {
+            "request": request,
+            "start_month": s_ym,
+            "end_month": e_ym,
+            "dt_inicio": dt_ini,
+            "dt_fim": dt_fim,
+            "labels": labels,
+            "debitos": debitos,
+            "creditos": creditos,
+            "saldo_dia": saldo_dia,
+            # flags para o template
+            "show_debitos": bool(show_debitos),
+            "show_creditos": bool(show_creditos),
+            "show_saldo": bool(show_saldo),
+        },
+    )
+
+# --- NOVA ROTA: detalhe de um dia (retorna um fragmento HTML) ---
+@app.get("/periodos/detalhe", response_class=HTMLResponse)
+def periodos_detalhe(request: Request, dia: str):
+    init_db()
+    with get_conn() as conn:
+        cur = conn.execute(SQL_DETAIL_BY_DAY, (dia,))
+        cols, rows = rows_to_dicts(cur, cur.fetchall())
+
+    return templates.TemplateResponse(
+        "periodos_detalhe.html",
+        {"request": request, "dia": dia, "cols": cols, "rows": rows},
     )

@@ -1,44 +1,187 @@
 {% extends "base.html" %}
 {% block content %}
-<h2>Transações por Período</h2>
-<form method="get" class="grid two">
-  <div>
-    <div class="label">Mês</div>
-    <select class="input" name="mes">
-      {% for m in range(1, 13) %}
-        <option value="{{m}}" {% if m == mes %}selected{% endif %}>{{"%02d"|format(m)}}</option>
-      {% endfor %}
-    </select>
-  </div>
-  <div>
-    <div class="label">Ano</div>
-    <input class="input" type="number" name="ano" value="{{ano}}" min="2000" max="2100">
-  </div>
-  <div>
-    <button class="btn" type="submit">Filtrar</button>
-  </div>
-</form>
+<h2>Períodos</h2>
+<p class="small">Selecione um intervalo de meses. O gráfico mostra, por dia, Débitos, Créditos e Saldo do dia.</p>
 
-<div class="table-wrap" style="margin-top:16px">
-  <table class="table dense">
-    <thead>
-      <tr>
-        <th>Data</th>
-        <th>Débitos</th>
-        <th>Créditos</th>
-        <th>Saldo do Dia</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for r in historico %}
-      <tr>
-        <td data-label="Data">{{ r.data | fmt_date }}</td>
-        <td data-label="Débitos" class="right mono">{{ r.debitos | money }}</td>
-        <td data-label="Créditos" class="right mono">{{ r.creditos | money }}</td>
-        <td data-label="Saldo do Dia" class="right mono">{{ r.saldo | money }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+<div class="card">
+  <style>
+    /* GRID */
+    .filter-grid{
+      display:grid;
+      grid-template-columns:repeat(12,1fr);
+      gap:16px;
+      align-items:end; /* alinha pela base */
+    }
+    .col-4{grid-column:span 4}
+    .col-12{grid-column:span 12}
+    @media (max-width: 768px){
+      .col-4,.col-12{grid-column:span 12}
+    }
+
+    /* BLOCO PADRÃO (contorno unificado dos filtros) */
+    .tool{
+      background:var(--panel);
+      border:1px solid var(--border);
+      border-radius:12px;
+      padding:12px;
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+      min-height:72px;
+    }
+    .tool .label{margin:0;color:var(--muted);font-size:12px}
+
+    /* Altura padronizada dos inputs e botões */
+    .tool .input, .tool select{
+      height:40px;
+      padding:0 12px;
+      line-height:40px;
+    }
+    .actions .btn{
+      display:inline-flex; align-items:center; justify-content:center;
+      height:40px; padding:0 14px; line-height:40px;
+    }
+
+    /* Chips/blobs com mesmo padrão de borda */
+    .chips{display:flex;gap:8px;flex-wrap:wrap}
+    .chip.toggle{display:inline-flex;align-items:center;gap:6px;cursor:pointer;
+      background:var(--chip); border:1px solid var(--border); border-radius:999px; padding:6px 10px}
+    .chip.toggle .blob{
+      width:12px;height:12px;border-radius:50%;
+      border:2px solid var(--border); background:transparent; transition:all .15s ease;
+    }
+    .chip.toggle.active{ border-color: var(--accent) }
+    .chip.toggle.active .blob{ border-color: var(--accent); box-shadow:0 0 0 2px rgba(90,176,255,.25) }
+
+    /* Linha de botões */
+    .actions{display:flex;gap:10px;justify-content:flex-end}
+  </style>
+
+  <form method="get" class="filter-grid">
+    <!-- Linha 1: filtros lado a lado, todos com o MESMO contorno (tool) -->
+    <div class="tool col-4">
+      <div class="label">Início (mês)</div>
+      <input class="input" type="month" name="start_month" value="{{ start_month }}">
+    </div>
+
+    <div class="tool col-4">
+      <div class="label">Fim (mês)</div>
+      <input class="input" type="month" name="end_month" value="{{ end_month }}">
+    </div>
+
+    <div class="tool col-4">
+      <div class="label">Séries</div>
+      <div class="chips">
+        <label class="chip small toggle {{ 'active' if show_debitos else '' }}">
+          <input type="checkbox" name="show_debitos" value="1" {{ 'checked' if show_debitos else '' }} hidden>
+          <span class="blob"></span> Débitos
+        </label>
+        <label class="chip small toggle {{ 'active' if show_creditos else '' }}">
+          <input type="checkbox" name="show_creditos" value="1" {{ 'checked' if show_creditos else '' }} hidden>
+          <span class="blob"></span> Créditos
+        </label>
+        <label class="chip small toggle {{ 'active' if show_saldo else '' }}">
+          <input type="checkbox" name="show_saldo" value="1" {{ 'checked' if show_saldo else '' }} hidden>
+          <span class="blob"></span> Saldo do dia
+        </label>
+      </div>
+    </div>
+
+    <!-- Linha 2: botões com MESMA altura/largura visual -->
+    <div class="col-12 actions">
+      <button class="btn" type="submit">Aplicar</button>
+      <a class="btn secondary" href="/periodos" role="button">Limpar</a>
+    </div>
+  </form>
+
+  <script>
+    // mantém estado visual dos chips (contorno e blob)
+    document.querySelectorAll('.chip.toggle').forEach(ch=>{
+      const cb = ch.querySelector('input[type=checkbox]');
+      if (cb) ch.classList.toggle('active', cb.checked);
+      ch.addEventListener('click', ()=> setTimeout(()=> ch.classList.toggle('active', cb.checked), 0));
+    });
+  </script>
+
+  <div class="hr"></div>
+  <div class="small">
+    Período aplicado:
+    <strong>{{ dt_inicio | fmt_date }}</strong> a
+    <strong>{{ dt_fim | fmt_date }}</strong>
+  </div>
 </div>
+
+
+
+
+<!-- GRÁFICO -->
+<div class="card" style="margin-top:16px">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+    <strong>Débitos × Créditos × Saldo do dia</strong>
+    <span class="small">Clique numa coluna para ver os lançamentos do dia</span>
+  </div>
+  <div class="hr"></div>
+  <canvas id="chart" height="110"></canvas>
+</div>
+
+<!-- DETALHE DO DIA (preenchido via fetch) -->
+<div id="detalhe-dia"></div>
+
+<!-- Chart.js (CDN) -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+  const labels = {{ labels|tojson }};
+  const debitos = {{ debitos|tojson }};
+  const creditos = {{ creditos|tojson }};
+  const saldoDia = {{ saldo_dia|tojson }};
+
+  const showDebitos = {{ 1 if show_debitos else 0 }};
+  const showCreditos = {{ 1 if show_creditos else 0 }};
+  const showSaldo = {{ 1 if show_saldo else 0 }};
+
+  const datasets = [
+    { key:'debitos',  label:'Débitos',     type:'bar', data: debitos,  hidden: !showDebitos },
+    { key:'creditos', label:'Créditos',    type:'bar', data: creditos, hidden: !showCreditos },
+    { key:'saldo',    label:'Saldo do dia',type:'bar', data: saldoDia, hidden: !showSaldo }
+  ];
+
+  const chart = new Chart(document.getElementById('chart'), {
+    type: 'bar',
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      interaction: { mode: 'nearest', intersect: true },
+      scales: { x: { stacked:false }, y: { beginAtZero:true } },
+      plugins: { legend: { position: 'top' } },
+      onClick: async (evt, elements) => {
+        if (!elements?.length) return;
+        const idx = elements[0].index;
+        const dia = labels[idx];
+        const resp = await fetch(`/periodos/detalhe?dia=${encodeURIComponent(dia)}`);
+        const html = await resp.text();
+        const container = document.getElementById('detalhe-dia');
+        container.innerHTML = html;
+        container.scrollIntoView({ behavior:'smooth', block:'start' });
+      }
+    }
+  });
+
+  // Toggle instantâneo (sem reload) quando usuário mexe nos checkboxes
+  // Mantém também o estado visual no gráfico até que ele clique "Aplicar" se quiser persistir na URL.
+  document.querySelectorAll('input[name=show_debitos], input[name=show_creditos], input[name=show_saldo]')
+    .forEach(cb => {
+      cb.addEventListener('change', () => {
+        const map = {
+          show_debitos: 'Débitos',
+          show_creditos: 'Créditos',
+          show_saldo: 'Saldo do dia'
+        };
+        const ds = chart.data.datasets.find(d => d.label === map[cb.name]);
+        if (ds) {
+          ds.hidden = !cb.checked;
+          chart.update();
+        }
+      });
+    });
+</script>
 {% endblock %}
