@@ -6,6 +6,9 @@ from pathlib import Path
 import sqlite3
 import re
 from datetime import date
+import os  # <-- ADICIONE
+
+from src.settings import PROJECT_ROOT, DB_PATH, DATA_RAW_DIR, DATA_PROCESSED_DIR  # já existem
 
 from src.settings import PROJECT_ROOT, DB_PATH, DATA_RAW_DIR
 from src.db import get_conn, init_db
@@ -377,3 +380,42 @@ def investimentos_remove_saldo(
 @app.get("/health")
 def health():
     return PlainTextResponse("ok")
+
+# --- NOVA ROTA: limpar banco e arquivos raw ---
+@app.post("/admin/wipe")
+def wipe_all():
+    """
+    Apaga o banco (bank.db) e recria o schema.
+    Remove todos os PDFs em data/raw (e opcionalmente arquivos processados).
+    """
+    # 1) Remover o .db
+    try:
+        if DB_PATH.exists():
+            DB_PATH.unlink()
+    except Exception as e:
+        # se não conseguir apagar, ainda assim tentamos recriar por cima
+        pass
+
+    # 2) Recriar estrutura vazia
+    init_db()
+
+    # 3) Apagar PDFs em data/raw
+    DATA_RAW_DIR.mkdir(parents=True, exist_ok=True)
+    for p in DATA_RAW_DIR.glob("*.pdf"):
+        try:
+            p.unlink()
+        except Exception:
+            pass
+
+    # 4) (Opcional) Limpar /data/processed
+    DATA_PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
+    for p in DATA_PROCESSED_DIR.glob("*"):
+        try:
+            if p.is_file():
+                p.unlink()
+        except Exception:
+            pass
+
+    # Redireciona de volta para a tela de input com um flag de sucesso
+    resp = RedirectResponse(url="/input?wipe_ok=1", status_code=303)
+    return resp

@@ -4,6 +4,10 @@
   <div class="card grid">
     <form method="post" action="/input" enctype="multipart/form-data" class="grid">
       <div>
+        <div class="label">Descrição do arquivo</div>
+        <input class="input" type="text" name="descricao" required />
+      </div>
+      <div>
         <div class="label">Selecione o PDF</div>
         <input class="input" type="file" name="pdf" accept="application/pdf" required />
       </div>
@@ -11,9 +15,27 @@
         <button class="btn" type="submit">Enviar e Ingerir</button>
       </div>
     </form>
+
     {% if ok %}
-      <div class="chip">Arquivo {{ file_name }} ingerido com sucesso.</div>
+      <div class="chip">Arquivo {{ file_name }} ({{ descricao }}) ingerido com sucesso.</div>
+    {% endif %}
+
+    {% if request.query_params.get('wipe_ok') %}
+      <div class="chip" style="border-color:var(--accent-2); color:var(--accent-2)">Base limpa com sucesso.</div>
     {% endif %}
   </div>
+
+  <!-- CARD PERIGOSO: APAGAR TUDO -->
+  <div class="card" style="margin-top:16px; border-color: var(--danger)">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+      <strong style="color:var(--danger)">Apagar TUDO</strong>
+      <span class="small">Isto irá excluir o banco de dados, todas as transações/saldos e os PDFs em <code>data/raw</code>.</span>
+    </div>
+    <div class="hr"></div>
+    <form method="post" action="/admin/wipe" onsubmit="return confirm('Tem certeza que deseja apagar TUDO? Esta ação não pode ser desfeita.');">
+      <button class="btn" type="submit" style="background:var(--danger); color:#fff">Apagar Banco + PDFs</button>
+    </form>
+  </div>
+
   <p class="small">O PDF será salvo em <code>data/raw</code> e processado para <code>transactions</code> e <code>daily_balances</code>.</p>
 {% endblock %}
