@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block content %}
+  <h2>SQL Sandbox (somente SELECT, máx. 100 linhas)</h2>
+
+  <div class="card">
+    <form method="post" class="grid">
+      <div>
+        <div class="label">Consulta SQL</div>
+        <textarea class="input" name="sql" rows="6">{{ sql }}</textarea>
+      </div>
+      <div>
+        <button class="btn" type="submit">Executar</button>
+      </div>
+    </form>
+    {% if error %}
+      <div class="hr"></div>
+      <div class="chip" style="border-color:var(--danger); color:var(--danger)">Erro: {{ error }}</div>
+    {% endif %}
+  </div>
+
+  {% if cols and rows is not none %}
+  <div class="card" style="margin-top:16px">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+      <strong>Resultado</strong>
+      <div class="chips">
+        <span class="chip small">Máx. 100 linhas</span>
+        <span class="chip small">Role lateral no desktop</span>
+      </div>
+      <label class="small t-meta">Lista adaptada para celular (formato em cartões)</label>
+    </div>
+    <div class="hr"></div>
+
+    <div class="table-wrap">
+      <table class="table dense">
+        <thead>
+          <tr>{% for c in cols %}<th>{{ c }}</th>{% endfor %}</tr>
+        </thead>
+        <tbody>
+          {% for r in rows %}
+            <tr>
+              {% for c in cols %}
+                <td data-label="{{ c }}" class="{{ 'right mono nowrap' if c|lower in ['valor','saldo','saldo_dia','amount'] else '' }}">
+                  {% if c|lower in ['valor','saldo','saldo_dia','amount'] %}
+                    {{ r[c] | money }}
+                  {% elif c|lower in ['data','date'] %}
+                    {{ r[c] | fmt_date }}
+                  {% else %}
+                    {{ r[c] }}
+                  {% endif %}
+                </td>
+              {% endfor %}
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+{% endblock %}

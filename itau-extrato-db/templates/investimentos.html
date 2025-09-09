@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+{% block content %}
+  <h2>Investimentos (Aplicações & Resgates)</h2>
+  <p class="small">Filtre por período e/ou por investimento. Use o botão do card para cadastrar/visualizar o saldo diário.</p>
+
+  <!-- FILTROS -->
+  <div class="card">
+    <form method="get" action="/investimentos" class="grid three">
+      <div>
+        <div class="label">Início</div>
+        <input class="input" type="date" name="start" value="{{ start or '' }}">
+      </div>
+      <div>
+        <div class="label">Fim</div>
+        <input class="input" type="date" name="end" value="{{ end or '' }}">
+      </div>
+      <div>
+        <div class="label">Investimento</div>
+        <select class="input" name="app_filter">
+          <option value="">(Todos)</option>
+          {% for a in opcoes %}
+            <option value="{{ a }}" {{ 'selected' if a == app_filter else '' }}>{{ a }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <!-- mantém contexto do painel de saldo ao aplicar filtros -->
+      {% if sel_aplicacao %}
+        <input type="hidden" name="aplicacao" value="{{ sel_aplicacao }}">
+      {% endif %}
+      {% if sel_data %}
+        <input type="hidden" name="data" value="{{ sel_data }}">
+      {% endif %}
+      {% if show_form %}
+        <input type="hidden" name="show_form" value="1">
+      {% endif %}
+
+      <div>
+        <button class="btn" type="submit">Aplicar Filtros</button>
+        <!-- Remover filtros -->
+        <a class="btn secondary" style="margin-left:8px" href="/investimentos">Remover filtros</a>
+      </div>
+    </form>
+  </div>
+
+  <!-- CARDS POR APLICAÇÃO (respeitam filtros) -->
+  <div id="cards-grid" class="grid two" style="margin-top:16px">
+    {% for r in apps_rows %}
+      {% set lb = latest_balances.get(r.aplicacao) %}
+      {% set next_show = (0 if (show_form and sel_aplicacao == r.aplicacao) else 1) %}
+      <div class="card card-app">
+        <div class="card-head" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+          <strong>{{ r.aplicacao }}</strong>
+        </div>
+
+        <div class="card-body">
+          <div class="hr"></div>
+          <div class="grid three">
+            <div>
+              <div class="label">Valor Aplicado</div>
+              <div class="kpi">{{ r.valor_aplicado | money }}</div>
+            </div>
+            <div>
+              <div class="label">Valor Resgatado</div>
+              <div class="kpi">{{ r.valor_resgatado | money }}</div>
+            </div>
+            <div>
+              <div class="label">Saldo atual</div>
+              {% if lb %}
+                <div class="kpi">{{ lb.saldo | money }}</div>
+                <div class="small">Atualizado em {{ lb.data | fmt_date }}</div>
+              {% else %}
+                <div class="kpi" style="color:var(--danger)">NULL</div>
+                <div class="small" style="opacity:.75">Cadastre o saldo para acompanhar a evolução.</div>
+              {% endif %}
+            </div>
+          </div>
+          <div class="hr"></div>
+
+          <!-- Alterna a visualização do painel de lançamento:
+               se este card já está aberto, o próximo clique oculta (show_form=0);
+               caso contrário, abre (show_form=1). -->
+          <a class="btn secondary"
+             href="/investimentos?aplicacao={{ r.aplicacao }}&data={{ (sel_data or today) }}&start={{ start or '' }}&end={{ end or '' }}&app_filter={{ app_filter or '' }}&show_form={{ next_show }}">
+            Cadastrar / Ver saldo
+          </a>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+
+  <!-- (removido) CSS/JS de recolher/expandir cards -->
+
+  <!-- PAINEL: Lançar/atualizar saldo do dia (só via botão do card) -->
+  {% if show_form and sel_aplicacao %}
+    <div class="card" id="panel-lancar"
+         style="{{ 'border:1px solid var(--danger); box-shadow:0 0 0 2px rgba(255,107,107,.2);' if needs_attention_today else '' }}; margin-top:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+        <strong>Lançar/atualizar saldo do dia</strong>
+        <div class="chips" style="display:flex;gap:8px;flex-wrap:wrap">
+          {% if needs_attention_today %}
+            <span class="chip" style="border-color:var(--danger); color:var(--danger)">
+              Sem saldo de hoje ({{ today|fmt_date }}) para {{ sel_aplicacao }}
+            </span>
+          {% endif %}
+          <!-- Mostra o remover apenas se há saldo exato para a data selecionada -->
+          {% if has_exact_for_selected %}
+            <form method="post" action="/investimentos/remove-saldo" style="margin:0">
+              <input type="hidden" name="aplicacao" value="{{ sel_aplicacao }}">
+              <input type="hidden" name="data" value="{{ sel_data or today }}">
+              <button class="btn secondary" type="submit" style="background:#243142;color:var(--danger);border:1px solid var(--danger)">
+                Remover saldo do dia
+              </button>
+            </form>
+          {% endif %}
+        </div>
+      </div>
+      <div class="hr"></div>
+
+      <form method="post" action="/investimentos/add-saldo" class="grid three">
+        <div>
+          <div class="label">Aplicação</div>
+          <select name="aplicacao" required>
+            {% for a in opcoes %}
+              <option value="{{ a }}" {{ 'selected' if a == sel_aplicacao else '' }}>{{ a }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <div class="label">Data</div>
+          <input class="input" type="date" name="data" value="{{ sel_data or today }}" required>
+        </div>
+        <div>
+          <div class="label">Saldo</div>
+          <input class="input" type="number" step="0.01" name="saldo" placeholder="0,00" required>
+        </div>
+        <div>
+          <button class="btn" type="submit">Salvar Saldo</button>
+        </div>
+      </form>
+
+      {% if sel_aplicacao and sel_data and saldo_info is not none %}
+        <div class="hr"></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+          <strong>Saldo em {{ sel_data | fmt_date }} — {{ sel_aplicacao }}</strong>
+          {% if aviso_replicado %}
+            <span class="chip" style="border-color:var(--danger); color:var(--danger)">{{ aviso_replicado }}</span>
+          {% endif %}
+        </div>
+        <div class="kpi" style="margin-top:6px">
+          {{ saldo_info.saldo is not none and (saldo_info.saldo | money) or '—' }}
+        </div>
+        <p class="small">
+          {% if saldo_info.replicado is sameas true %}
+            (Saldo replicado do último dia informado)
+          {% elif saldo_info.replicado is sameas false %}
+            (Saldo informado exatamente para esta data)
+          {% else %}
+            (Sem saldos informados ainda para esta aplicação)
+          {% endif %}
+        </p>
+      {% endif %}
+    </div>
+  {% endif %}
+{% endblock %}

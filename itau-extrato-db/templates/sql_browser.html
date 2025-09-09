@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block content %}
+  <h2>SQL Tabelas & Views</h2>
+
+  <div class="card">
+    <form method="get">
+      <div class="label">Escolha uma tabela/view</div>
+      <select class="input" name="name" onchange="this.form.submit()">
+        <option value="">(selecione)</option>
+        {% for n,t,sql in items %}
+          <option value="{{ n }}" {{ 'selected' if chosen==n else '' }}>{{ t }} • {{ n }}</option>
+        {% endfor %}
+      </select>
+    </form>
+  </div>
+
+  {% if chosen %}
+  <div class="card" style="margin-top:16px">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <strong>{{ chosen }} — DDL</strong>
+      <button type="button" class="btn secondary" onclick="toggle('ddl')">Abrir/Fechar</button>
+    </div>
+    <div id="ddl" class="code" style="display:block">{{ ddl }}</div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+      <strong>Preview (10 primeiras linhas)</strong>
+      <div class="chips">
+        <span class="chip small">Role lateral no desktop</span>
+        <span class="chip small">Cards no mobile</span>
+      </div>
+      <label class="small t-meta">Lista adaptada para celular (formato em cartões)</label>
+    </div>
+    <div class="hr"></div>
+
+    {% if preview_rows and preview_cols %}
+      <div class="table-wrap">
+        <table class="table dense">
+          <thead>
+            <tr>
+              {% for c in preview_cols %}<th>{{ c }}</th>{% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in preview_rows %}
+              <tr>
+                {% for c in preview_cols %}
+                  <td data-label="{{ c }}" class="{{ 'right mono nowrap' if c in ['valor','saldo','saldo_dia'] else '' }}">
+                    {% if c in ['valor','saldo','saldo_dia'] %}
+                      {{ r[c] | money }}
+                    {% elif c in ['data'] %}
+                      {{ r[c] | fmt_date }}
+                    {% else %}
+                      {{ r[c] }}
+                    {% endif %}
+                  </td>
+                {% endfor %}
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="small">Sem linhas/preview indisponível.</div>
+    {% endif %}
+  </div>
+
+  {% endif %}
+{% endblock %}

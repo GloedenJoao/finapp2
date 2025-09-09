@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block content %}
+  <h2>Saldo do Dia & Transações</h2>
+
+  <div class="card">
+    <form class="grid three" method="get">
+      <div>
+        <div class="label">Data (YYYY-MM-DD)</div>
+        <input class="input" type="date" name="data" value="{{ sel_data or '' }}">
+      </div>
+      <div>
+        <div class="label">Tipo</div>
+        <select class="input" name="tipo">
+          <option value="">(todos)</option>
+          <option value="credito" {{ 'selected' if sel_tipo=='credito' else '' }}>Entrada (crédito)</option>
+          <option value="debito"  {{ 'selected' if sel_tipo=='debito'  else '' }}>Saída (débito)</option>
+        </select>
+      </div>
+      <div>
+        <div class="label">Categoria</div>
+        <select class="input" name="categoria">
+          <option value="">(todas)</option>
+          <option value="aplicacao_investimento" {{ 'selected' if sel_categoria=='aplicacao_investimento' else '' }}>Aplicações</option>
+          <option value="resgate_investimento" {{ 'selected' if sel_categoria=='resgate_investimento' else '' }}>Resgates</option>
+        </select>
+      </div>
+      <div><button class="btn" type="submit">Filtrar</button></div>
+    </form>
+  </div>
+
+  <div class="grid two" style="margin-top:16px">
+    <div class="card">
+      <div class="small">Saldo do dia</div>
+      <div class="kpi">{{ saldo is not none and (saldo | money) or '—' }}</div>
+      <div class="small">* Snapshot informado no extrato (não reconcilia somas do dia).</div>
+    </div>
+    <div class="card">
+      <div class="small">Filtros ativos</div>
+      <div class="chips">
+        <span class="chip">data: {{ sel_data or '—' }}</span>
+        <span class="chip">tipo: {{ sel_tipo or 'todos' }}</span>
+        <span class="chip">categoria: {{ sel_categoria or 'todas' }}</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+      <strong>Transações</strong>
+      <div class="chips">
+        <span class="chip small">Máx. 100 linhas</span>
+        <span class="chip small">Role lateral no desktop</span>
+      </div>
+      <label class="small t-meta">Lista adaptada para celular (formato em cartões)</label>
+    </div>
+    <div class="hr"></div>
+
+    <div class="table-wrap">
+      <table class="table dense">
+        <thead>
+          <tr>
+            {% for c in cols %}
+              <th class="{{ 'right' if c in ['valor','saldo_dia'] else '' }}">{{ c }}</th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in rows %}
+            <tr>
+              {% for c in cols %}
+                {% set is_money = c in ['valor','saldo_dia'] %}
+                {% set is_date  = c in ['data'] %}
+                <td
+                  data-label="{{ c }}"
+                  class="{{ 'right mono nowrap' if is_money else ('nowrap' if is_date else '') }}"
+                >
+                  {% if is_money %}
+                    {{ r[c] | money }}
+                  {% elif is_date %}
+                    {{ r[c] | fmt_date }}
+                  {% else %}
+                    {{ r[c] }}
+                  {% endif %}
+                </td>
+              {% endfor %}
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+{% endblock %}

@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>{{ title or "Extrato Itaú • UI" }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='css/dark.css') }}">
+  <script defer src="{{ url_for('static', path='js/main.js') }}"></script>
+</head>
+<body>
+  <nav class="nav">
+    <div class="nav-left"  style="margin-right:auto; display:flex; gap:10px;">
+      <a href="/input" class="{{ 'active' if request.url.path == '/input' else '' }}">Input</a>
+      <a href="/saldo-do-dia" class="{{ 'active' if request.url.path == '/saldo-do-dia' else '' }}">Saldo do Dia</a>
+      <a href="/investimentos" class="{{ 'active' if request.url.path == '/investimentos' else '' }}">Investimentos</a>
+    </div>
+
+    <!-- bloco direito -->
+    <div class="nav-right" style="margin-left:auto; display:flex; gap:10px;">
+      <a href="/sql-tabelas" class="{{ 'active' if request.url.path == '/sql-tabelas' else '' }}">SQL Tabelas</a>
+      <a href="/sql-sandbox" class="{{ 'active' if request.url.path == '/sql-sandbox' else '' }}">SQL Sandbox</a>
+    </div>
+  </nav>
+  <div class="container">
+    {% block content %}{% endblock %}
+  </div>
+</body>
+</html>
