@@ -55,3 +55,4 @@ def upsert_investment_balance(conn, aplicacao: str, data_iso: str, saldo: float)
         """,
         (aplicacao, data_iso, saldo),
     )
+

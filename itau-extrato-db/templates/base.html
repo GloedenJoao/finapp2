@@ -12,6 +12,7 @@
     <div class="nav-left"  style="margin-right:auto; display:flex; gap:10px;">
       <a href="/input" class="{{ 'active' if request.url.path == '/input' else '' }}">Input</a>
       <a href="/saldo-do-dia" class="{{ 'active' if request.url.path == '/saldo-do-dia' else '' }}">Saldo do Dia</a>
+        <a href="/periodos" class="{{ 'active' if request.url.path.startswith('/periodos') else '' }}">Períodos</a>
       <a href="/investimentos" class="{{ 'active' if request.url.path == '/investimentos' else '' }}">Investimentos</a>
     </div>
 

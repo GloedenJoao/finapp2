@@ -419,3 +419,32 @@ def wipe_all():
     # Redireciona de volta para a tela de input com um flag de sucesso
     resp = RedirectResponse(url="/input?wipe_ok=1", status_code=303)
     return resp
+
+@app.get("/periodos", response_class=HTMLResponse)
+def periodos(request: Request, mes: int | None = None, ano: int | None = None):
+    init_db()
+    today = date.today()
+    if not mes:
+        mes = today.month
+    if not ano:
+        ano = today.year
+
+    with get_conn() as conn:
+        sql = """
+            SELECT 
+                date(data) as data,
+                SUM(CASE WHEN tipo_mov='debito'  THEN valor ELSE 0 END) AS debitos,
+                SUM(CASE WHEN tipo_mov='credito' THEN valor ELSE 0 END) AS creditos,
+                MAX(saldo_dia) as saldo
+            FROM transactions
+            WHERE strftime('%m', data) = ? AND strftime('%Y', data) = ?
+            GROUP BY date(data)
+            ORDER BY date(data);
+        """
+        cur = conn.execute(sql, (f"{mes:02d}", str(ano)))
+        cols, historico = rows_to_dicts(cur, cur.fetchall())
+
+    return templates.TemplateResponse(
+        "periodos.html",
+        {"request": request, "mes": mes, "ano": ano, "historico": historico},
+    )
