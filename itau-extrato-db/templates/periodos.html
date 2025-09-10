@@ -5,72 +5,43 @@
 
 <div class="card">
   <style>
-    /* GRID */
-    .filter-grid{
-      display:grid;
-      grid-template-columns:repeat(12,1fr);
-      gap:16px;
-      align-items:end; /* alinha pela base */
-    }
-    .col-4{grid-column:span 4}
-    .col-12{grid-column:span 12}
-    @media (max-width: 768px){
-      .col-4,.col-12{grid-column:span 12}
-    }
-
-    /* BLOCO PADRÃO (contorno unificado dos filtros) */
-    .tool{
-      background:var(--panel);
-      border:1px solid var(--border);
-      border-radius:12px;
-      padding:12px;
-      display:flex;
-      flex-direction:column;
-      gap:8px;
-      min-height:72px;
-    }
-    .tool .label{margin:0;color:var(--muted);font-size:12px}
-
-    /* Altura padronizada dos inputs e botões */
-    .tool .input, .tool select{
-      height:40px;
-      padding:0 12px;
-      line-height:40px;
-    }
-    .actions .btn{
-      display:inline-flex; align-items:center; justify-content:center;
-      height:40px; padding:0 14px; line-height:40px;
-    }
-
-    /* Chips/blobs com mesmo padrão de borda */
-    .chips{display:flex;gap:8px;flex-wrap:wrap}
-    .chip.toggle{display:inline-flex;align-items:center;gap:6px;cursor:pointer;
-      background:var(--chip); border:1px solid var(--border); border-radius:999px; padding:6px 10px}
-    .chip.toggle .blob{
-      width:12px;height:12px;border-radius:50%;
-      border:2px solid var(--border); background:transparent; transition:all .15s ease;
-    }
-    .chip.toggle.active{ border-color: var(--accent) }
-    .chip.toggle.active .blob{ border-color: var(--accent); box-shadow:0 0 0 2px rgba(90,176,255,.25) }
-
-    /* Linha de botões */
-    .actions{display:flex;gap:10px;justify-content:flex-end}
+    .filter-grid{ display:grid; grid-template-columns:repeat(12,1fr); gap:16px; align-items:end }
+    .col-4{ grid-column:span 4 } .col-12{ grid-column:span 12 }
+    @media (max-width: 768px){ .col-4,.col-12{ grid-column:span 12 } }
+    .tool{ background:var(--panel); border:1px solid var(--border); border-radius:12px;
+           padding:12px; display:flex; flex-direction:column; gap:8px; min-height:72px }
+    .tool .label{ margin:0; color:var(--muted); font-size:12px }
+    .tool .input{ height:40px; padding:0 12px; line-height:40px }
+    .chips{ display:flex; gap:8px; flex-wrap:wrap }
+    .chip.toggle{ display:inline-flex; align-items:center; gap:6px; cursor:pointer;
+                  background:var(--chip); border:1px solid var(--border); border-radius:999px; padding:6px 10px }
+    .chip.toggle .blob{ width:12px;height:12px;border-radius:50%; border:2px solid var(--border); transition:all .15s }
+    .chip.toggle.active{ border-color:var(--accent) }
+    .chip.toggle.active .blob{ border-color:var(--accent); box-shadow:0 0 0 2px rgba(90,176,255,.25) }
+    .actions{ display:flex; gap:10px; justify-content:flex-end }
+    .actions .btn{ display:inline-flex; align-items:center; justify-content:center; height:40px; padding:0 14px; line-height:40px }
   </style>
 
   <form method="get" class="filter-grid">
-    <!-- Linha 1: filtros lado a lado, todos com o MESMO contorno (tool) -->
+    <!-- Linha 1 -->
     <div class="tool col-4">
-      <div class="label">Início (mês)</div>
-      <input class="input" type="month" name="start_month" value="{{ start_month }}">
+      <div class="label">Início (data)</div>
+      <input class="input" type="date" name="start" value="{{ start }}">
     </div>
 
     <div class="tool col-4">
-      <div class="label">Fim (mês)</div>
-      <input class="input" type="month" name="end_month" value="{{ end_month }}">
+      <div class="label">Fim (data)</div>
+      <input class="input" type="date" name="end" value="{{ end }}">
     </div>
 
     <div class="tool col-4">
       <div class="label">Séries</div>
+
+      <!-- envia 0 quando desmarcado -->
+      <input type="hidden" name="show_debitos"  value="0">
+      <input type="hidden" name="show_creditos" value="0">
+      <input type="hidden" name="show_saldo"    value="0">
+
       <div class="chips">
         <label class="chip small toggle {{ 'active' if show_debitos else '' }}">
           <input type="checkbox" name="show_debitos" value="1" {{ 'checked' if show_debitos else '' }} hidden>
@@ -87,7 +58,7 @@
       </div>
     </div>
 
-    <!-- Linha 2: botões com MESMA altura/largura visual -->
+    <!-- Linha 2 -->
     <div class="col-12 actions">
       <button class="btn" type="submit">Aplicar</button>
       <a class="btn secondary" href="/periodos" role="button">Limpar</a>
@@ -95,7 +66,7 @@
   </form>
 
   <script>
-    // mantém estado visual dos chips (contorno e blob)
+    // estado visual dos chips
     document.querySelectorAll('.chip.toggle').forEach(ch=>{
       const cb = ch.querySelector('input[type=checkbox]');
       if (cb) ch.classList.toggle('active', cb.checked);
@@ -113,24 +84,25 @@
 
 
 
+<!-- === GRÁFICOS === -->
 
 <!-- === GRÁFICOS === -->
 
 <!-- Débito × Crédito (por dia) -->
-<div class="card" style="margin-top:16px">
+<div class="card" id="card-dc" {% if not show_debitos and not show_creditos %}style="display:none"{% endif %} >
   <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
-    <strong>Débitos × Créditos (por dia)</strong>
+    <strong>Débitos - Créditos (por dia)</strong>
     <span class="small">Clique em uma barra para ver as transações do dia</span>
   </div>
   <div class="hr"></div>
   <canvas id="chartDC" height="110"></canvas>
 </div>
 
-<!-- Saldo do dia (visualização separada) -->
-<div class="card" style="margin-top:16px">
+<!-- Saldo do dia (separado) -->
+<div class="card" id="card-saldo" {% if not show_saldo %}style="display:none"{% endif %} >
   <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
     <strong>Saldo do dia (por dia)</strong>
-    <span class="small">Clique em um ponto para ver as transações do dia</span>
+    <span class="small">Clique em um ponto/coluna para ver as transações do dia</span>
   </div>
   <div class="hr"></div>
   <canvas id="chartSaldo" height="110"></canvas>
@@ -139,16 +111,20 @@
 <!-- Painel de detalhes (preenchido via fetch) -->
 <div id="detalhe-dia"></div>
 
-<!-- Chart.js (CDN) -->
+<!-- Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>
-  // Dados vindos do backend
-  const labels   = {{ labels|tojson }};
-  const debitos  = {{ debitos|tojson }};
-  const creditos = {{ creditos|tojson }};
-  const saldoDia = {{ saldo_dia|tojson }};
+  // Dados do backend (NOMES ALINHADOS ao Python!)
+  const labels    = {{ labels|tojson }};       // ['YYYY-MM-DD', ...]
+  const debitos   = {{ debitos|tojson }};      // [n, n, ...]
+  const creditos  = {{ creditos|tojson }};     // [n, n, ...]
+  const saldoDia  = {{ saldo_dia|tojson }};    // [n|null, ...]
 
-  // Função comum para abrir detalhe do dia
+  // Flags vindas do backend
+  const showDebitos  = {{ 1 if show_debitos else 0 }};
+  const showCreditos = {{ 1 if show_creditos else 0 }};
+  const showSaldo    = {{ 1 if show_saldo else 0 }};
+
   async function loadDetalhe(dia){
     const resp = await fetch(`/periodos/detalhe?dia=${encodeURIComponent(dia)}`);
     const html = await resp.text();
@@ -157,50 +133,63 @@
     container.scrollIntoView({ behavior:'smooth', block:'start' });
   }
 
-  // Gráfico 1: Débitos × Créditos (barras)
-  const chartDC = new Chart(document.getElementById('chartDC'), {
-    type: 'bar',
-    data: {
-      labels,
-      datasets: [
-        { label: 'Débitos',  type:'bar', data: debitos },
-        { label: 'Créditos', type:'bar', data: creditos }
-      ]
-    },
-    options: {
-      responsive: true,
-      interaction: { mode: 'nearest', intersect: true },
-      scales: { x:{ stacked:false }, y:{ beginAtZero:true } },
-      plugins: { legend:{ position:'top' } },
-      onClick: (evt, elements) => {
-        if (!elements?.length) return;
-        const idx = elements[0].index;
-        loadDetalhe(labels[idx]);
-      }
-    }
-  });
+  // Helper genérico para clique em qualquer chart (bar/line)
+  function hookClickOpenDetails(chartInstance, canvasEl){
+    canvasEl.addEventListener('click', (evt)=>{
+      const points = chartInstance.getElementsAtEventForMode(evt, 'nearest', {intersect:true}, true);
+      if (!points || !points.length) return;
+      const idx = points[0].index;
+      loadDetalhe(labels[idx]);
+    });
+  }
 
-  // Gráfico 2: Saldo do dia (linha)
-  const chartSaldo = new Chart(document.getElementById('chartSaldo'), {
-    type: 'line',
-    data: {
-      labels,
-      datasets: [
-        { label: 'Saldo do dia', type:'line', data: saldoDia, tension: 0.25, pointRadius: 3 }
-      ]
-    },
-    options: {
-      responsive: true,
-      interaction: { mode: 'nearest', intersect: true },
-      scales: { x:{}, y:{ beginAtZero:false } },
-      plugins: { legend:{ position:'top' } },
-      onClick: (evt, elements) => {
-        if (!elements?.length) return;
-        const idx = elements[0].index;
-        loadDetalhe(labels[idx]);
+  // === Gráfico Débito × Crédito (barras) ===
+  (function(){
+    if (!showDebitos && !showCreditos) return; // evita chart vazio
+
+    const ds = [];
+    if (showDebitos)  ds.push({ label:'Débitos',  type:'bar', data: debitos });
+    if (showCreditos) ds.push({ label:'Créditos', type:'bar', data: creditos });
+
+    const ctx = document.getElementById('chartDC');
+    const chart = new Chart(ctx, {
+      type: 'bar',
+      data: { labels, datasets: ds },
+      options: {
+        responsive: true,
+        interaction: { mode: 'nearest', intersect: true },
+        scales: { x:{ stacked:false }, y:{ beginAtZero:true } },
+        plugins: { legend:{ position:'top' } }
       }
-    }
-  });
+    });
+
+    hookClickOpenDetails(chart, ctx);
+  })();
+
+  // === Gráfico Saldo do dia (linha) ===
+  (function(){
+    if (!showSaldo) return;
+
+    const ctx = document.getElementById('chartSaldo');
+    const chart = new Chart(ctx, {
+      type: 'line',   // se quiser colunas: troque para 'bar'
+      data: {
+        labels,
+        datasets: [
+          { label:'Saldo do dia', data: saldoDia, tension:0.25, pointRadius:3 }
+        ]
+      },
+      options: {
+        responsive: true,
+        interaction: { mode: 'nearest', intersect: true },
+        scales: { x:{}, y:{ beginAtZero:false } },
+        plugins: { legend:{ position:'top' } }
+      }
+    });
+
+    hookClickOpenDetails(chart, ctx);
+  })();
 </script>
+
 
 {% endblock %}

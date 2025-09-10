@@ -381,6 +381,26 @@ def investimentos_remove_saldo(
 def health():
     return PlainTextResponse("ok")
 
+@app.post("/investimentos/add-saldo", response_class=HTMLResponse)
+def investimentos_add_saldo(
+    request: Request,
+    aplicacao: str = Form(...),
+    data: str = Form(...),   # YYYY-MM-DD
+    saldo: float = Form(...),
+):
+    init_db()
+    with get_conn() as conn:
+        from src.db import upsert_investment_balance
+        upsert_investment_balance(conn, aplicacao, data, saldo)
+        conn.commit()
+
+    # Redireciona de volta mantendo o painel aberto
+    return RedirectResponse(
+        url=f"/investimentos?aplicacao={aplicacao}&data={data}&show_form=1",
+        status_code=303
+    )
+
+
 # --- NOVA ROTA: limpar banco e arquivos raw ---
 @app.post("/admin/wipe")
 def wipe_all():
@@ -450,6 +470,8 @@ def _month_range_bounds(start_ym: str | None, end_ym: str | None) -> tuple[str, 
     _, dt_fim = _ym_to_bounds(e)
     return s, e, dt_ini, dt_fim
 
+
+
 # --- SQLs para o período (agregação por dia + saldo do dia via view) ---
 SQL_PERIOD_DAILY = """
 WITH days AS (
@@ -476,46 +498,86 @@ WHERE date(data) = date(?)
 ORDER BY data, id;
 """
 
-# --- NOVA ROTA: /periodos (gráfico + painel de detalhe sob demanda) ---
+from datetime import date, datetime, timedelta
+from fastapi import Query
+
+def _date_range_bounds(start: str | None, end: str | None) -> tuple[str, str]:
+    """
+    Converte 'YYYY-MM-DD' -> (dt_inicio, dt_fim).
+    Defaults: últimos 30 dias se nada vier.
+    Corrige se vierem invertidas.
+    """
+    def parse(d: str | None) -> date | None:
+        if not d: return None
+        try:
+            return datetime.strptime(d, "%Y-%m-%d").date()
+        except Exception:
+            return None
+
+    today = date.today()
+    d_start = parse(start)
+    d_end   = parse(end)
+
+    if not d_start and not d_end:
+        d_end = today
+        d_start = today - timedelta(days=29)
+    elif d_start and not d_end:
+        d_end = d_start
+    elif not d_start and d_end:
+        d_start = d_end
+
+    if d_start > d_end:
+        d_start, d_end = d_end, d_start
+
+    return d_start.isoformat(), d_end.isoformat()
+
 @app.get("/periodos", response_class=HTMLResponse)
 def periodos(
     request: Request,
-    start_month: str | None = Query(None, description="YYYY-MM"),
-    end_month: str | None = Query(None, description="YYYY-MM"),
-    show_debitos: int = Query(1),
-    show_creditos: int = Query(1),
-    show_saldo: int = Query(1),
+    start: str | None = Query(None, description="YYYY-MM-DD"),
+    end: str | None = Query(None, description="YYYY-MM-DD"),
 ):
     init_db()
-    s_ym, e_ym, dt_ini, dt_fim = _month_range_bounds(start_month, end_month)
+    dt_ini, dt_fim = _date_range_bounds(start, end)
+
+    # flags (hidden 0 + checkbox 1)
+    def flag(name: str, default: bool = True) -> bool:
+        vals = request.query_params.getlist(name)
+        if not vals: return default
+        return vals[-1] in ("1", "true", "on", "yes")
+
+    show_debitos  = flag("show_debitos",  True)
+    show_creditos = flag("show_creditos", True)
+    show_saldo    = flag("show_saldo",    True)
 
     with get_conn() as conn:
         cur = conn.execute(SQL_PERIOD_DAILY, (dt_ini, dt_fim))
         cols, rows = rows_to_dicts(cur, cur.fetchall())
 
-    labels = [r["dia"] for r in rows]
-    debitos = [float(r["debitos"] or 0.0) for r in rows]
-    creditos = [float(r["creditos"] or 0.0) for r in rows]
+    labels    = [r["dia"] for r in rows]
+    debitos   = [float(r["debitos"]  or 0.0) for r in rows]
+    creditos  = [float(r["creditos"] or 0.0) for r in rows]
     saldo_dia = [(r["saldo_dia"] if r["saldo_dia"] is not None else None) for r in rows]
+    
 
     return templates.TemplateResponse(
         "periodos.html",
         {
             "request": request,
-            "start_month": s_ym,
-            "end_month": e_ym,
+            "start": dt_ini,  # mantém os inputs preenchidos
+            "end": dt_fim,
             "dt_inicio": dt_ini,
             "dt_fim": dt_fim,
             "labels": labels,
             "debitos": debitos,
             "creditos": creditos,
             "saldo_dia": saldo_dia,
-            # flags para o template
-            "show_debitos": bool(show_debitos),
-            "show_creditos": bool(show_creditos),
-            "show_saldo": bool(show_saldo),
+            "show_debitos": show_debitos,
+            "show_creditos": show_creditos,
+            "show_saldo": show_saldo,
         },
     )
+
 
 # --- NOVA ROTA: detalhe de um dia (retorna um fragmento HTML) ---
 @app.get("/periodos/detalhe", response_class=HTMLResponse)
@@ -528,4 +590,104 @@ def periodos_detalhe(request: Request, dia: str):
     return templates.TemplateResponse(
         "periodos_detalhe.html",
         {"request": request, "dia": dia, "cols": cols, "rows": rows},
+    )
+
+def month_floor(dt: date) -> date:
+    return date(dt.year, dt.month, 1)
+
+def add_month(dt: date) -> date:
+    y, m = dt.year, dt.month
+    if m == 12:
+        return date(y+1, 1, 1)
+    return date(y, m+1, 1)
+
+# --- SQL mensal: Débito/Crédito por mês + Saldo do dia 1 (fallback último do mês anterior)
+SQL_MONTHLY = """
+WITH meses AS (
+  SELECT
+    strftime('%Y-%m-01', date("data")) AS mes,
+    SUM(CASE WHEN valor < 0 THEN -valor ELSE 0 END) AS debitos,
+    SUM(CASE WHEN valor > 0 THEN  valor ELSE 0 END) AS creditos
+  FROM transactions
+  WHERE date("data") BETWEEN date(?) AND date(?)
+  GROUP BY mes
+),
+saldo_mes AS (
+  SELECT
+    m.mes,
+    COALESCE(
+      -- saldo exatamente no dia 1 do mês
+      (SELECT s.saldo
+         FROM v_saldo_por_dia s
+        WHERE date(s."data") = date(m.mes)
+        LIMIT 1),
+      -- senão, o último saldo do mês anterior
+      (SELECT s2.saldo
+         FROM v_saldo_por_dia s2
+        WHERE strftime('%Y-%m', s2."data") = strftime('%Y-%m', date(m.mes, '-1 day'))
+        ORDER BY date(s2."data") DESC
+        LIMIT 1)
+    ) AS saldo_dia
+  FROM meses m
+)
+SELECT
+  m.mes       AS dia,        -- mantemos o nome 'dia' para reaproveitar o JS
+  m.debitos   AS debitos,
+  m.creditos  AS creditos,
+  s.saldo_dia AS saldo_dia
+FROM meses m
+LEFT JOIN saldo_mes s ON s.mes = m.mes
+ORDER BY m.mes;
+"""
+
+# --- NOVA ROTA: /saldos-mes (inspirada em /periodos, mas por mês)
+from fastapi import Query
+from datetime import datetime, timedelta
+
+@app.get("/saldos-mes", response_class=HTMLResponse)
+def saldos_mes(
+    request: Request,
+    start: str | None = Query(None, description="YYYY-MM-DD"),
+    end:   str | None = Query(None, description="YYYY-MM-DD"),
+):
+    init_db()
+    # Reaproveita o helper já existente para normalizar o range
+    dt_ini, dt_fim = _date_range_bounds(start, end)
+
+    # mesmas flags visuais da página periodos
+    def flag(name: str, default: bool = True) -> bool:
+        vals = request.query_params.getlist(name)
+        if not vals: return default
+        return vals[-1] in ("1", "true", "on", "yes")
+
+    show_debitos  = flag("show_debitos",  True)
+    show_creditos = flag("show_creditos", True)
+    show_saldo    = flag("show_saldo",    True)
+
+    with get_conn() as conn:
+        cur = conn.execute(SQL_MONTHLY, (dt_ini, dt_fim))
+        cols, rows = rows_to_dicts(cur, cur.fetchall())
+
+    # labels serão 'YYYY-MM-01' para ficar igual ao eixo X do periodos
+    labels    = [r["dia"] for r in rows]  # 'YYYY-MM-01'
+    debitos   = [float(r["debitos"]  or 0.0) for r in rows]
+    creditos  = [float(r["creditos"] or 0.0) for r in rows]
+    saldo_dia = [ (r["saldo_dia"] if r["saldo_dia"] is not None else None) for r in rows ]
+
+    return templates.TemplateResponse(
+        "saldos_mes.html",
+        {
+            "request": request,
+            "start": dt_ini,
+            "end":   dt_fim,
+            "dt_inicio": dt_ini,
+            "dt_fim":    dt_fim,
+            "labels": labels,
+            "debitos": debitos,
+            "creditos": creditos,
+            "saldo_dia": saldo_dia,
+            "show_debitos": show_debitos,
+            "show_creditos": show_creditos,
+            "show_saldo": show_saldo,
+        },
     )

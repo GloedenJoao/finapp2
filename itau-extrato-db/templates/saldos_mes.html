@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Saldos por mês</h2>
+<p class="small">
+  Débito e Crédito são somados por mês a partir de <code>transactions</code> (valor &lt; 0 → Débito; valor &gt; 0 → Crédito).
+  O Saldo é o <em>saldo no dia 1</em> de cada mês em <code>v_saldo_por_dia</code>; se faltar, usa-se o último saldo do mês anterior.
+</p>
+
+<!-- FILTROS -->
+<div class="card">
+  <style>
+    .filter-grid{ display:grid; grid-template-columns:repeat(12,1fr); gap:16px; align-items:end }
+    .col-4{ grid-column:span 4 } .col-12{ grid-column:span 12 }
+    @media (max-width: 768px){ .col-4,.col-12{ grid-column:span 12 } }
+    .tool{ background:var(--panel); border:1px solid var(--border); border-radius:12px;
+           padding:12px; display:flex; flex-direction:column; gap:8px; min-height:72px }
+    .tool .label{ margin:0; color:var(--muted); font-size:12px }
+    .tool .input{ height:40px; padding:0 12px; line-height:40px }
+    .actions{ display:flex; gap:10px; justify-content:flex-end }
+    .actions .btn{ display:inline-flex; align-items:center; justify-content:center; height:40px; padding:0 14px; line-height:40px }
+  </style>
+
+  <form method="get" class="filter-grid">
+    <div class="tool col-4">
+      <div class="label">Início (data)</div>
+      <input class="input" type="date" name="start" value="{{ start }}">
+    </div>
+
+    <div class="tool col-4">
+      <div class="label">Fim (data)</div>
+      <input class="input" type="date" name="end" value="{{ end }}">
+    </div>
+
+    <div class="col-4 actions">
+      <button class="btn" type="submit">Aplicar</button>
+      <a class="btn secondary" href="/saldos-mes" role="button">Limpar</a>
+    </div>
+  </form>
+
+  <div class="hr"></div>
+  <div class="small">
+    Período aplicado:
+    <strong>{{ dt_inicio | fmt_date }}</strong> a
+    <strong>{{ dt_fim | fmt_date }}</strong>
+  </div>
+</div>
+
+{# --- Totais do período para os cards --- #}
+{% set total_debitos  = debitos  | sum %}
+{% set total_creditos = creditos | sum %}
+{% set total_creditos_inv = (total_creditos * -1) %}
+{% set diff_periodo = (total_creditos - total_debitos) %}
+
+<!-- KPIs rápidos (agora com 4 cards) -->
+<div class="grid two" style="margin:16px 0">
+  <div class="card">
+    <div class="label">Débito total (período)</div>
+    <div class="kpi">{{ total_debitos | money }}</div>
+  </div>
+  <div class="card">
+    <div class="label">Crédito total (período) — invertido</div>
+    <div class="kpi">{{ total_creditos_inv | money }}</div>
+    <div class="small">Exibido com sinal invertido conforme solicitado</div>
+  </div>
+  <div class="card">
+    <div class="label">Saldo — média dos pontos</div>
+    <div class="kpi">
+      {% set valid = saldo_dia | select('!=', None) | list %}
+      {% if valid|length > 0 %}
+        {{ (valid | sum / valid|length) | money }}
+      {% else %} — {% endif %}
+    </div>
+  </div>
+  <div class="card">
+    <div class="label">Diferença do mês (Crédito − Débito) — no período</div>
+    <div class="kpi">{{ diff_periodo | money }}</div>
+  </div>
+</div>
+
+<!-- === GRÁFICO COMBINADO === -->
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+    <strong>Débitos × Créditos (barras) + Saldo (linha)</strong>
+  </div>
+  <div class="hr"></div>
+  <div class="x-scroll">
+    <canvas id="chartCombo" height="120"></canvas>
+  </div>
+</div>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+  // Dados do backend
+  const labels    = {{ labels|tojson }};       // ['YYYY-MM-01', ...]
+  const debitos   = {{ debitos|tojson }};      // [n, ...]
+  const creditos  = {{ creditos|tojson }};     // [n, ...]
+  const saldoDia  = {{ saldo_dia|tojson }};    // [n|null, ...]
+
+  const ctx = document.getElementById('chartCombo').getContext('2d');
+
+  new Chart(ctx, {
+    data: {
+      labels,
+      datasets: [
+        { type: 'bar',  label: 'Débitos',  data: debitos,  yAxisID: 'y',  borderWidth: 1 },
+        { type: 'bar',  label: 'Créditos', data: creditos, yAxisID: 'y',  borderWidth: 1 },
+        { type: 'line', label: 'Saldo (dia 1 / mês ant.)', data: saldoDia, yAxisID: 'y1', tension: 0.25, spanGaps: true, pointRadius: 3 }
+      ]
+    },
+    options: {
+      responsive: true,
+      interaction: { mode: 'index', intersect: false },
+      scales: {
+        y: {
+          beginAtZero: true,
+          title: { display: true, text: 'Débito / Crédito (somados no mês)' }
+        },
+        y1: {
+          beginAtZero: false,
+          position: 'right',
+          grid: { drawOnChartArea: false },
+          title: { display: true, text: 'Saldo (R$)' }
+        },
+        x: { ticks: { autoSkip: true, maxRotation: 0 } }
+      },
+      plugins: {
+        legend: { position: 'bottom' },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => {
+              const v = ctx.parsed.y;
+              if (v === null || v === undefined) return ctx.dataset.label + ': —';
+              return ctx.dataset.label + ': ' + v.toLocaleString('pt-BR');
+            }
+          }
+        }
+      }
+    }
+  });
+</script>
+{% endblock %}
